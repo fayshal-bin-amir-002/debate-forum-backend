@@ -15,4 +15,6 @@ router.post("/vote", DebateController.voteArgument);
 
 router.get("/details/:id", DebateController.getDebateDetails);
 
+router.get("/score-board", DebateController.getScoreboard);
+
 export const DebateRoutes = router;

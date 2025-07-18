@@ -72,9 +72,9 @@ const getAllDebates = async () => {
 };
 
 const joinDebate = async (
-  userEmail: string,
   debateId: string,
-  side: "Support" | "Oppose"
+  side: "Support" | "Oppose",
+  userEmail: string
 ) => {
   const existing = await prisma.argument.findFirst({
     where: {
@@ -84,7 +84,10 @@ const joinDebate = async (
   });
 
   if (existing) {
-    throw new ApiError(status.BAD_REQUEST, "You already joined this debate.");
+    throw new ApiError(
+      status.BAD_REQUEST,
+      `You already joined this debate in ${existing?.side} side.`
+    );
   }
 
   return await prisma.argument.create({
@@ -179,7 +182,95 @@ const getWinnerSide = async (debateId: string) => {
   return supportVotes > opposeVotes ? "Support" : "Oppose";
 };
 
-const getScoreboard = async (filter: "weekly" | "monthly" | "all-time") => {
+const getDebateDetails = async (debateId: string) => {
+  const debate = await prisma.debate.findUnique({
+    where: { id: debateId },
+    include: {
+      arguments: {
+        include: {
+          user: {
+            select: {
+              name: true,
+              email: true,
+              image: true,
+            },
+          },
+          votes: true,
+        },
+      },
+    },
+  });
+
+  if (!debate) throw new ApiError(status.NOT_FOUND, "Debate not found");
+
+  const isRunning = new Date() < debate.endsAt;
+
+  if (isRunning) {
+    const argumentsWithVotes = debate.arguments.map((arg) => ({
+      id: arg.id,
+      content: arg.content,
+      side: arg.side,
+      voteCount: arg.votes.length,
+      user: arg.user,
+    }));
+
+    return {
+      debateStatus: "running",
+      arguments: argumentsWithVotes,
+    };
+  } else {
+    const winnerSide = await getWinnerSide(debateId);
+
+    // Filter only participants in this debate
+    const userMap = new Map<
+      string,
+      {
+        name: string;
+        email: string;
+        image: string | null;
+        totalVotes: number;
+      }
+    >();
+
+    for (const arg of debate.arguments) {
+      const existing = userMap.get(arg.user.email);
+      const voteCount = arg.votes.length;
+
+      if (existing) {
+        existing.totalVotes += voteCount;
+      } else {
+        userMap.set(arg.user.email, {
+          name: arg.user.name,
+          email: arg.user.email,
+          image: arg.user.image ?? null,
+          totalVotes: voteCount,
+        });
+      }
+    }
+
+    const scoreBoard = Array.from(userMap.values()).sort(
+      (a, b) => b.totalVotes - a.totalVotes
+    );
+
+    return {
+      debateStatus: "closed",
+      winnerSide,
+      scoreBoard,
+    };
+  }
+};
+
+interface ScoreboardParams {
+  filter: "weekly" | "monthly" | "all-time";
+  page?: number;
+  limit?: number;
+}
+
+const getScoreboard = async ({
+  filter,
+  page = 1,
+  limit = 10,
+}: ScoreboardParams) => {
   let dateFilter = {};
   const now = new Date();
 
@@ -208,7 +299,7 @@ const getScoreboard = async (filter: "weekly" | "monthly" | "all-time") => {
     },
   });
 
-  return users
+  const scoreboard = users
     .map((user) => {
       const totalVotes = user.arguments.reduce(
         (sum, arg) => sum + arg.votes.length,
@@ -223,49 +314,23 @@ const getScoreboard = async (filter: "weekly" | "monthly" | "all-time") => {
         debatesParticipated: debates.size,
       };
     })
-    .sort((a, b) => b.totalVotes - a.totalVotes);
-};
-
-const getDebateDetails = async (debateId: string) => {
-  const debate = await prisma.debate.findUnique({
-    where: { id: debateId },
-    include: {
-      arguments: {
-        include: {
-          user: true,
-          votes: true,
-        },
-      },
-    },
-  });
-
-  if (!debate) throw new ApiError(status.NOT_FOUND, "Debate not found");
-
-  const isRunning = new Date() < debate.endsAt;
-
-  if (isRunning) {
-    const argumentsWithVotes = debate.arguments.map((arg) => ({
-      id: arg.id,
-      content: arg.content,
-      side: arg.side,
-      voteCount: arg.votes.length,
-      user: arg.user,
+    .sort((a, b) => b.totalVotes - a.totalVotes)
+    .map((user, index) => ({
+      ...user,
+      position: index + 1,
     }));
 
-    return {
-      debateStatus: "running",
-      arguments: argumentsWithVotes,
-    };
-  } else {
-    const winnerSide = await getWinnerSide(debateId);
-    const leaderboard = await getScoreboard("all-time");
+  const startIndex = (page - 1) * limit;
+  const paginated = scoreboard.slice(startIndex, startIndex + limit);
 
-    return {
-      debateStatus: "closed",
-      winnerSide,
-      leaderboard,
-    };
-  }
+  return {
+    meta: {
+      total: scoreboard.length,
+      page,
+      limit,
+    },
+    data: paginated,
+  };
 };
 
 export const DebateService = {

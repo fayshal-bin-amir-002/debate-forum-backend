@@ -25,8 +25,8 @@ const getAllDebates = catchAsync(async (req, res) => {
 });
 
 const joinDebate = catchAsync(async (req, res) => {
-  const { debateId, side } = req.body;
-  const result = await DebateService.joinDebate(req.user.email, debateId, side);
+  const { debateId, side, email } = req.body;
+  const result = await DebateService.joinDebate(debateId, side, email);
   sendResponse(res, {
     success: true,
     statusCode: status.OK,
@@ -52,8 +52,8 @@ const postArgument = catchAsync(async (req, res) => {
 });
 
 const voteArgument = catchAsync(async (req, res) => {
-  const { argumentId } = req.body;
-  const result = await DebateService.voteArgument(req.user.email, argumentId);
+  const { argumentId, email } = req.body;
+  const result = await DebateService.voteArgument(email, argumentId);
   sendResponse(res, {
     success: true,
     statusCode: status.CREATED,
@@ -63,13 +63,28 @@ const voteArgument = catchAsync(async (req, res) => {
 });
 
 const getDebateDetails = catchAsync(async (req, res) => {
-  const { debateId } = req.params;
-  const result = await DebateService.getDebateDetails(debateId);
+  const result = await DebateService.getDebateDetails(req.params.id);
   sendResponse(res, {
     success: true,
     statusCode: status.OK,
     message: "Debate details retrieved",
     data: result,
+  });
+});
+
+const getScoreboard = catchAsync(async (req, res) => {
+  const filter = req.query.filter as "weekly" | "monthly" | "all-time";
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 20;
+
+  const result = await DebateService.getScoreboard({ filter, page, limit });
+
+  sendResponse(res, {
+    success: true,
+    statusCode: status.OK,
+    message: "Scoreboard fetched successfully",
+    meta: result.meta,
+    data: result.data,
   });
 });
 
@@ -80,4 +95,5 @@ export const DebateController = {
   voteArgument,
   getDebateDetails,
   getAllDebates,
+  getScoreboard,
 };
