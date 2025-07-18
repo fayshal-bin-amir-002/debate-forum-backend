@@ -8,19 +8,14 @@ datasource db {
 }
 
 model User {
-  email     String   @id @unique
+  email     String     @id @unique
   name      String
   password  String?
   image     String?
-  debates   Debate[] @relation("UserDebates")
+  createdAt DateTime   @default(now())
   arguments Argument[]
+  debates   Debate[]   @relation("UserDebates")
   votes     Vote[]
-  createdAt DateTime @default(now())
-} 
-
-enum DebateStatus {
-  Active
-  Closed
 }
 
 model Debate {
@@ -32,35 +27,34 @@ model Debate {
   duration    Int
   createdAt   DateTime   @default(now())
   endsAt      DateTime
-  status      DebateStatus @default(Active)
   authorEmail String
-  author      User        @relation("UserDebates", fields: [authorEmail], references: [email])
   arguments   Argument[]
+  author      User       @relation("UserDebates", fields: [authorEmail], references: [email])
 }
 
+
+model Argument {
+  id        String       @id @default(uuid())
+  content   String
+  side      ArgumentSide
+  createdAt DateTime     @default(now())
+  userEmail String
+  debateId  String
+  debate    Debate       @relation(fields: [debateId], references: [id])
+  user      User         @relation(fields: [userEmail], references: [email])
+  votes     Vote[]
+}
+
+model Vote {
+  id         String   @id @default(uuid())
+  userEmail  String
+  argumentId String
+  createdAt  DateTime @default(now())
+  argument   Argument @relation(fields: [argumentId], references: [id])
+  user       User     @relation(fields: [userEmail], references: [email])
+}
 
 enum ArgumentSide {
   Support
   Oppose
-}
-
-model Argument {
-  id         String   @id @default(uuid())
-  content    String
-  side       ArgumentSide
-  createdAt  DateTime @default(now())
-  userEmail  String
-  user       User     @relation(fields: [userEmail], references: [email])
-  debateId   String
-  debate     Debate   @relation(fields: [debateId], references: [id])
-  votes      Vote[]
-}
-
-model Vote {
-  id           String   @id @default(uuid())
-  userEmail    String
-  user         User     @relation(fields: [userEmail], references: [email])
-  argumentId   String
-  argument     Argument @relation(fields: [argumentId], references: [id])
-  createdAt    DateTime @default(now())
 }

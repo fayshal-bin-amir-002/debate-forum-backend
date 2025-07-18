@@ -91,6 +91,21 @@ const joinDebate = async (
     );
   }
 
+  const debate = await prisma.debate.findUnique({
+    where: {
+      id: debateId,
+    },
+  });
+
+  if (!debate) {
+    throw new ApiError(status.NOT_FOUND, "Debate not found");
+  }
+
+  const isClosed = new Date() > debate.endsAt;
+  if (isClosed) {
+    throw new ApiError(status.BAD_REQUEST, "Cannot join. Debate is closed.");
+  }
+
   return await prisma.argument.create({
     data: {
       userEmail,
@@ -112,10 +127,7 @@ const postArgument = async (
   );
 
   if (foundBanned) {
-    throw new ApiError(
-      status.BAD_REQUEST,
-      `Inappropriate word detected: "${foundBanned}"`
-    );
+    throw new ApiError(status.BAD_REQUEST, `Inappropriate word detected!`);
   }
 
   const debate = await prisma.debate.findUnique({ where: { id: debateId } });
@@ -192,45 +204,49 @@ const getWinnerSide = async (debateId: string) => {
 const getDebateDetails = async (debateId: string, userEmail?: string) => {
   const debate = await prisma.debate.findUnique({
     where: { id: debateId },
-    include: {
-      arguments: {
-        orderBy: {
-          createdAt: "desc",
-        },
-        include: {
-          user: {
-            select: {
-              name: true,
-              email: true,
-              image: true,
-            },
-          },
-          votes: true,
-        },
-      },
-    },
   });
 
   if (!debate) throw new ApiError(status.NOT_FOUND, "Debate not found");
 
+  const debateArguments = await prisma.argument.findMany({
+    where: {
+      debateId,
+      content: {
+        not: "",
+      },
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+    include: {
+      user: {
+        select: {
+          name: true,
+          email: true,
+          image: true,
+        },
+      },
+      votes: true,
+    },
+  });
+
   const isRunning = new Date() < debate.endsAt;
 
-  // Find if the user has participated and their side
   let iParticipated = false;
-  let mySide: "for" | "against" | null = null;
+  let mySide: "Support" | "Oppose" | null = null;
 
   if (userEmail) {
-    const myArgument = debate.arguments.find(
+    const myArgument = debateArguments.find(
       (arg) => arg.user.email === userEmail
     );
     if (myArgument) {
       iParticipated = true;
-      mySide = myArgument.side as "for" | "against";
+      mySide = myArgument.side;
     }
   }
 
   if (isRunning) {
-    const argumentsWithVotes = debate.arguments.map((arg) => ({
+    const argumentsWithVotes = debateArguments.map((arg) => ({
       id: arg.id,
       content: arg.content,
       side: arg.side,
@@ -257,7 +273,7 @@ const getDebateDetails = async (debateId: string, userEmail?: string) => {
       }
     >();
 
-    for (const arg of debate.arguments) {
+    for (const arg of debateArguments) {
       const existing = userMap.get(arg.user.email);
       const voteCount = arg.votes.length;
 
