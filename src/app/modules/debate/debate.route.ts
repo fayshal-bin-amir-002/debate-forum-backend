@@ -1,0 +1,18 @@
+import express from "express";
+import { DebateController } from "./debate.controller";
+
+const router = express.Router();
+
+router.post("/create", DebateController.createDebate);
+
+router.get("/", DebateController.getAllDebates);
+
+router.post("/join", DebateController.joinDebate);
+
+router.post("/post-argument", DebateController.postArgument);
+
+router.post("/vote", DebateController.voteArgument);
+
+router.get("/details/:id", DebateController.getDebateDetails);
+
+export const DebateRoutes = router;
