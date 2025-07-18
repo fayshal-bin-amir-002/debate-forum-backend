@@ -1,10 +1,11 @@
-import { duration } from "zod/v4/classic/iso.cjs";
 import { prisma } from "../../../shared/prisma";
 import ApiError from "../../errors/ApiError";
 import status from "http-status";
-import { ScoreboardParams } from "./debate.interface";
-
-const BANNED_WORDS = ["stupid", "idiot", "dumb"];
+import {
+  BANNED_WORDS,
+  DebateQueryParams,
+  ScoreboardParams,
+} from "./debate.interface";
 
 const createDebate = async (payload: any) => {
   const userEmail = payload?.userEmail;
@@ -36,10 +37,43 @@ const createDebate = async (payload: any) => {
   return result;
 };
 
-const getAllDebates = async () => {
+const getAllDebates = async (params: DebateQueryParams = {}) => {
+  const { searchTerm, sortBy } = params;
   const now = new Date();
 
+  const baseWhere: any = searchTerm
+    ? {
+        OR: [
+          {
+            title: {
+              contains: searchTerm,
+              mode: "insensitive",
+            },
+          },
+          {
+            category: {
+              contains: searchTerm,
+              mode: "insensitive",
+            },
+          },
+          {
+            tags: {
+              has: searchTerm,
+            },
+          },
+        ],
+      }
+    : {};
+
+  // Filter for "endingSoon"
+  if (sortBy === "endingSoon") {
+    baseWhere.endsAt = {
+      gt: now,
+    };
+  }
+
   const debates = await prisma.debate.findMany({
+    where: baseWhere,
     select: {
       id: true,
       title: true,
@@ -47,6 +81,7 @@ const getAllDebates = async () => {
       endsAt: true,
       category: true,
       duration: true,
+      tags: true,
       author: {
         select: {
           name: true,
@@ -54,22 +89,49 @@ const getAllDebates = async () => {
           image: true,
         },
       },
+      arguments: {
+        select: {
+          _count: {
+            select: {
+              votes: true,
+            },
+          },
+        },
+      },
     },
-    orderBy: {
-      createdAt: "desc",
-    },
+    orderBy:
+      sortBy === "mostVoted"
+        ? {
+            createdAt: "desc",
+          }
+        : sortBy === "endingSoon"
+        ? {
+            endsAt: "asc",
+          }
+        : {
+            createdAt: "desc",
+          },
   });
 
-  return debates.map((debate) => ({
-    id: debate.id,
-    title: debate.title,
-    authorName: debate.author.name,
-    authorEmail: debate.author.email,
-    authorImage: debate.author.image,
-    category: debate.category,
-    duration: debate.duration,
-    status: now < debate.endsAt ? "Running" : "Ended",
-  }));
+  return debates.map((debate) => {
+    const totalVotes = debate.arguments.reduce(
+      (sum, arg) => sum + arg._count.votes,
+      0
+    );
+
+    return {
+      id: debate.id,
+      title: debate.title,
+      authorName: debate.author.name,
+      authorEmail: debate.author.email,
+      authorImage: debate.author.image,
+      category: debate.category,
+      duration: debate.duration,
+      tags: debate.tags,
+      voteCount: totalVotes,
+      status: now < debate.endsAt ? "Running" : "Ended",
+    };
+  });
 };
 
 const joinDebate = async (
@@ -194,9 +256,14 @@ const getWinnerSide = async (debateId: string) => {
   const supportVotes = votes
     .filter((a) => a.side === "Support")
     .reduce((acc, a) => acc + a.votes.length, 0);
+
   const opposeVotes = votes
     .filter((a) => a.side === "Oppose")
     .reduce((acc, a) => acc + a.votes.length, 0);
+
+  if (supportVotes === opposeVotes) {
+    return "Draw";
+  }
 
   return supportVotes > opposeVotes ? "Support" : "Oppose";
 };
@@ -211,9 +278,6 @@ const getDebateDetails = async (debateId: string, userEmail?: string) => {
   const debateArguments = await prisma.argument.findMany({
     where: {
       debateId,
-      content: {
-        not: "",
-      },
     },
     orderBy: {
       createdAt: "desc",
@@ -246,18 +310,21 @@ const getDebateDetails = async (debateId: string, userEmail?: string) => {
   }
 
   if (isRunning) {
-    const argumentsWithVotes = debateArguments.map((arg) => ({
-      id: arg.id,
-      content: arg.content,
-      side: arg.side,
-      voteCount: arg.votes.length,
-      user: arg.user,
-    }));
+    const argumentsWithVotes = debateArguments
+      .filter((arg) => arg.content.trim() !== "")
+      .map((arg) => ({
+        id: arg.id,
+        content: arg.content,
+        side: arg.side,
+        voteCount: arg.votes.length,
+        user: arg.user,
+      }));
 
     return {
       debateStatus: "running",
       iParticipated,
       mySide,
+      endsAt: debate.endsAt,
       arguments: argumentsWithVotes,
     };
   } else {
@@ -274,6 +341,7 @@ const getDebateDetails = async (debateId: string, userEmail?: string) => {
     >();
 
     for (const arg of debateArguments) {
+      if (!arg.content || arg.content.trim() === "") continue;
       const existing = userMap.get(arg.user.email);
       const voteCount = arg.votes.length;
 

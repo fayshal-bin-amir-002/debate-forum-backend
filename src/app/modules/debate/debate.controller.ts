@@ -14,7 +14,7 @@ const createDebate = catchAsync(async (req, res) => {
 });
 
 const getAllDebates = catchAsync(async (req, res) => {
-  const result = await DebateService.getAllDebates();
+  const result = await DebateService.getAllDebates(req.query);
 
   sendResponse(res, {
     success: true,
