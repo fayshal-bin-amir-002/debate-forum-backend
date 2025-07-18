@@ -21,7 +21,7 @@ app.use("/api/v1", router);
 const getAController = async (req: Request, res: Response) => {
   res.send({
     status: "success",
-    message: "Debate server is running...",
+    message: "Debate Forum server is running...",
   });
 };
 
