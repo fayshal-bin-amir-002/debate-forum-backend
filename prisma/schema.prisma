@@ -1,0 +1,66 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  image    String?
+  debates   Debate[] @relation("UserDebates")
+  arguments Argument[]
+  votes     Vote[]
+  createdAt DateTime @default(now())
+}
+
+enum DebateStatus {
+  Active
+  Closed
+}
+
+model Debate {
+  id          String     @id @default(uuid())
+  title       String
+  description String
+  tags        String[]
+  category    String
+  duration    Int      // in minutes
+  createdAt   DateTime @default(now())
+  endsAt      DateTime
+  status      DebateStatus   @default(Active) // active | closed
+  authorId    String
+  author      User      @relation("UserDebates", fields: [authorId], references: [id])
+  arguments   Argument[]
+}
+
+enum ArgumentSide {
+  Support
+  Oppose
+}
+
+model Argument {
+  id        String   @id @default(uuid())
+  content   String
+  side      ArgumentSide   // support | oppose
+  createdAt DateTime @default(now())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  debateId  String
+  debate    Debate   @relation(fields: [debateId], references: [id])
+  votes     Vote[]
+}
+
+model Vote {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  argumentId String
+  argument   Argument @relation(fields: [argumentId], references: [id])
+  createdAt  DateTime @default(now())
+}
