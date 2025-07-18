@@ -2,6 +2,7 @@ import { duration } from "zod/v4/classic/iso.cjs";
 import { prisma } from "../../../shared/prisma";
 import ApiError from "../../errors/ApiError";
 import status from "http-status";
+import { ScoreboardParams } from "./debate.interface";
 
 const BANNED_WORDS = ["stupid", "idiot", "dumb"];
 
@@ -130,7 +131,13 @@ const postArgument = async (
       debateId,
     },
     include: {
-      user: true,
+      user: {
+        select: {
+          name: true,
+          email: true,
+          image: true,
+        },
+      },
     },
   });
 
@@ -182,11 +189,14 @@ const getWinnerSide = async (debateId: string) => {
   return supportVotes > opposeVotes ? "Support" : "Oppose";
 };
 
-const getDebateDetails = async (debateId: string) => {
+const getDebateDetails = async (debateId: string, userEmail?: string) => {
   const debate = await prisma.debate.findUnique({
     where: { id: debateId },
     include: {
       arguments: {
+        orderBy: {
+          createdAt: "desc",
+        },
         include: {
           user: {
             select: {
@@ -205,6 +215,20 @@ const getDebateDetails = async (debateId: string) => {
 
   const isRunning = new Date() < debate.endsAt;
 
+  // Find if the user has participated and their side
+  let iParticipated = false;
+  let mySide: "for" | "against" | null = null;
+
+  if (userEmail) {
+    const myArgument = debate.arguments.find(
+      (arg) => arg.user.email === userEmail
+    );
+    if (myArgument) {
+      iParticipated = true;
+      mySide = myArgument.side as "for" | "against";
+    }
+  }
+
   if (isRunning) {
     const argumentsWithVotes = debate.arguments.map((arg) => ({
       id: arg.id,
@@ -216,12 +240,13 @@ const getDebateDetails = async (debateId: string) => {
 
     return {
       debateStatus: "running",
+      iParticipated,
+      mySide,
       arguments: argumentsWithVotes,
     };
   } else {
     const winnerSide = await getWinnerSide(debateId);
 
-    // Filter only participants in this debate
     const userMap = new Map<
       string,
       {
@@ -254,17 +279,13 @@ const getDebateDetails = async (debateId: string) => {
 
     return {
       debateStatus: "closed",
+      iParticipated,
+      mySide,
       winnerSide,
       scoreBoard,
     };
   }
 };
-
-interface ScoreboardParams {
-  filter: "weekly" | "monthly" | "all-time";
-  page?: number;
-  limit?: number;
-}
 
 const getScoreboard = async ({
   filter,

@@ -1,9 +1,5 @@
-export interface IDebate {
-  title: string;
-  description: string;
-  tags: string[];
-  category: string;
-  duration: number;
-  status: "Active" | "Closed";
-  authorEmail: string;
+export interface ScoreboardParams {
+  filter: "weekly" | "monthly" | "all-time";
+  page?: number;
+  limit?: number;
 }

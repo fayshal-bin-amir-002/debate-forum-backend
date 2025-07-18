@@ -13,7 +13,7 @@ router.post("/post-argument", DebateController.postArgument);
 
 router.post("/vote", DebateController.voteArgument);
 
-router.get("/details/:id", DebateController.getDebateDetails);
+router.get("/details/:id/:email", DebateController.getDebateDetails);
 
 router.get("/score-board", DebateController.getScoreboard);
 

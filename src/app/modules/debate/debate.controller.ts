@@ -36,9 +36,9 @@ const joinDebate = catchAsync(async (req, res) => {
 });
 
 const postArgument = catchAsync(async (req, res) => {
-  const { debateId, content, side } = req.body;
+  const { debateId, content, side, userEmail } = req.body;
   const result = await DebateService.postArgument(
-    req.user.email,
+    userEmail,
     debateId,
     content,
     side
@@ -63,7 +63,10 @@ const voteArgument = catchAsync(async (req, res) => {
 });
 
 const getDebateDetails = catchAsync(async (req, res) => {
-  const result = await DebateService.getDebateDetails(req.params.id);
+  const result = await DebateService.getDebateDetails(
+    req.params.id,
+    req.params.email
+  );
   sendResponse(res, {
     success: true,
     statusCode: status.OK,
