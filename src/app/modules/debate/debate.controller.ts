@@ -51,6 +51,16 @@ const postArgument = catchAsync(async (req, res) => {
   });
 });
 
+const editArgument = catchAsync(async (req, res) => {
+  const result = await DebateService.editArgument(req.body);
+  sendResponse(res, {
+    success: true,
+    statusCode: status.CREATED,
+    message: "Argument updated successfully",
+    data: result,
+  });
+});
+
 const voteArgument = catchAsync(async (req, res) => {
   const { argumentId, email } = req.body;
   const result = await DebateService.voteArgument(email, argumentId);
@@ -78,7 +88,7 @@ const getDebateDetails = catchAsync(async (req, res) => {
 const getScoreboard = catchAsync(async (req, res) => {
   const filter = req.query.filter as "weekly" | "monthly" | "all-time";
   const page = parseInt(req.query.page as string) || 1;
-  const limit = parseInt(req.query.limit as string) || 20;
+  const limit = parseInt(req.query.limit as string) || 10;
 
   const result = await DebateService.getScoreboard({ filter, page, limit });
 
@@ -99,4 +109,5 @@ export const DebateController = {
   getDebateDetails,
   getAllDebates,
   getScoreboard,
+  editArgument,
 };

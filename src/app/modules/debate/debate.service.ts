@@ -188,13 +188,13 @@ const postArgument = async (
     content.toLowerCase().includes(word)
   );
 
-  if (foundBanned) {
-    throw new ApiError(status.BAD_REQUEST, `Inappropriate word detected!`);
-  }
-
   const debate = await prisma.debate.findUnique({ where: { id: debateId } });
   if (!debate || new Date() > debate.endsAt) {
     throw new ApiError(status.BAD_REQUEST, "Debate is closed.");
+  }
+
+  if (foundBanned) {
+    throw new ApiError(status.BAD_REQUEST, `Inappropriate word detected!`);
   }
 
   const argument = await prisma.argument.create({
@@ -218,6 +218,55 @@ const postArgument = async (
   return argument;
 };
 
+const editArgument = async (payload: {
+  userEmail: string;
+  argumentId: string;
+  content: string;
+}) => {
+  const { userEmail, argumentId, content } = payload;
+  const argument = await prisma.argument.findFirst({
+    where: {
+      id: argumentId,
+    },
+    include: {
+      user: true,
+    },
+  });
+
+  if (!argument) {
+    throw new ApiError(status.NOT_FOUND, "Argument not found.");
+  }
+
+  const createdAtDate = new Date(argument.createdAt);
+  const now = new Date();
+  const timeDiff = now.getTime() - createdAtDate.getTime();
+
+  if (timeDiff > 5 * 60 * 1000) {
+    throw new ApiError(
+      status.BAD_REQUEST,
+      "Edit argument time has expired (5 minutes)."
+    );
+  }
+
+  if (userEmail !== argument.userEmail) {
+    throw new ApiError(
+      status.FORBIDDEN,
+      "You are not authorized to edit this argument."
+    );
+  }
+
+  const updatedArgument = await prisma.argument.update({
+    where: {
+      id: argument.id,
+    },
+    data: {
+      content,
+    },
+  });
+
+  return updatedArgument;
+};
+
 const voteArgument = async (userEmail: string, argumentId: string) => {
   const alreadyVoted = await prisma.vote.findFirst({
     where: {
@@ -226,10 +275,6 @@ const voteArgument = async (userEmail: string, argumentId: string) => {
     },
   });
 
-  if (alreadyVoted) {
-    throw new ApiError(status.BAD_REQUEST, "Already voted.");
-  }
-
   const argument = await prisma.argument.findUnique({
     where: { id: argumentId },
     include: { debate: true },
@@ -237,6 +282,10 @@ const voteArgument = async (userEmail: string, argumentId: string) => {
 
   if (!argument || new Date() > argument.debate.endsAt) {
     throw new ApiError(status.BAD_REQUEST, "Debate is closed.");
+  }
+
+  if (alreadyVoted) {
+    throw new ApiError(status.BAD_REQUEST, "Already voted.");
   }
 
   return await prisma.vote.create({
@@ -276,12 +325,8 @@ const getDebateDetails = async (debateId: string, userEmail?: string) => {
   if (!debate) throw new ApiError(status.NOT_FOUND, "Debate not found");
 
   const debateArguments = await prisma.argument.findMany({
-    where: {
-      debateId,
-    },
-    orderBy: {
-      createdAt: "desc",
-    },
+    where: { debateId },
+    orderBy: { createdAt: "desc" },
     include: {
       user: {
         select: {
@@ -309,66 +354,75 @@ const getDebateDetails = async (debateId: string, userEmail?: string) => {
     }
   }
 
-  if (isRunning) {
-    const argumentsWithVotes = debateArguments
-      .filter((arg) => arg.content.trim() !== "")
-      .map((arg) => ({
-        id: arg.id,
-        content: arg.content,
-        side: arg.side,
-        voteCount: arg.votes.length,
-        user: arg.user,
-      }));
+  const baseData = {
+    debateId: debate.id,
+    endsAt: debate.endsAt,
+    iParticipated,
+    mySide,
+  };
 
+  const argumentsWithVotes = debateArguments
+    .filter((arg) => arg.content.trim() !== "")
+    .map((arg) => ({
+      id: arg.id,
+      content: arg.content,
+      side: arg.side,
+      voteCount: arg.votes.length,
+      user: arg.user,
+      createdAt: arg.createdAt,
+    }));
+
+  if (isRunning) {
     return {
+      ...baseData,
       debateStatus: "running",
-      iParticipated,
-      mySide,
-      endsAt: debate.endsAt,
       arguments: argumentsWithVotes,
     };
-  } else {
-    const winnerSide = await getWinnerSide(debateId);
-
-    const userMap = new Map<
-      string,
-      {
-        name: string;
-        email: string;
-        image: string | null;
-        totalVotes: number;
-      }
-    >();
-
-    for (const arg of debateArguments) {
-      if (!arg.content || arg.content.trim() === "") continue;
-      const existing = userMap.get(arg.user.email);
-      const voteCount = arg.votes.length;
-
-      if (existing) {
-        existing.totalVotes += voteCount;
-      } else {
-        userMap.set(arg.user.email, {
-          name: arg.user.name,
-          email: arg.user.email,
-          image: arg.user.image ?? null,
-          totalVotes: voteCount,
-        });
-      }
-    }
-
-    const scoreBoard = Array.from(userMap.values()).sort(
-      (a, b) => b.totalVotes - a.totalVotes
-    );
-
-    return {
-      debateStatus: "closed",
-      iParticipated,
-      mySide,
-      winnerSide,
-      scoreBoard,
-    };
   }
+
+  // Calculate scoreBoard & winner side if debate is closed
+  const winnerSide = await getWinnerSide(debateId);
+
+  const userMap = new Map<
+    string,
+    {
+      name: string;
+      email: string;
+      image: string | null;
+      totalVotes: number;
+      side: "Support" | "Oppose";
+    }
+  >();
+
+  for (const arg of debateArguments) {
+    if (!arg.content || arg.content.trim() === "") continue;
+    const voteCount = arg.votes.length;
+    const email = arg.user.email;
+
+    if (userMap.has(email)) {
+      userMap.get(email)!.totalVotes += voteCount;
+    } else {
+      userMap.set(email, {
+        name: arg.user.name,
+        email,
+        image: arg.user.image ?? null,
+        totalVotes: voteCount,
+        side: arg.side,
+      });
+    }
+  }
+
+  const scoreBoard = Array.from(userMap.values()).sort(
+    (a, b) => b.totalVotes - a.totalVotes
+  );
+
+  return {
+    ...baseData,
+    debateStatus: "closed",
+    winnerSide,
+    scoreBoard,
+    arguments: argumentsWithVotes, // Optional: keep this if needed even after closing
+  };
 };
 
 const getScoreboard = async ({
@@ -415,11 +469,13 @@ const getScoreboard = async ({
       return {
         name: user.name,
         email: user.email,
+        image: user.image,
         totalVotes,
         debatesParticipated: debates.size,
       };
     })
     .sort((a, b) => b.totalVotes - a.totalVotes)
+    .filter((user) => user?.debatesParticipated > 0)
     .map((user, index) => ({
       ...user,
       position: index + 1,
@@ -447,4 +503,5 @@ export const DebateService = {
   getScoreboard,
   getDebateDetails,
   getAllDebates,
+  editArgument,
 };

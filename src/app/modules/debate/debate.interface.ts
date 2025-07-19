@@ -10,6 +10,7 @@ export interface DebateQueryParams {
 }
 
 export const BANNED_WORDS = [
+  "fuck",
   "stupid",
   "idiot",
   "dumb",
