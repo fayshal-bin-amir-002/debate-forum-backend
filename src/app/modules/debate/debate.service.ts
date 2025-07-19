@@ -60,6 +60,7 @@ const getAllDebates = async (params: DebateQueryParams = {}) => {
     select: {
       id: true,
       title: true,
+      description: true,
       createdAt: true,
       endsAt: true,
       category: true,
