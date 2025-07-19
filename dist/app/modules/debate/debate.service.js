@@ -61,6 +61,7 @@ const getAllDebates = (...args_1) => __awaiter(void 0, [...args_1], void 0, func
         select: {
             id: true,
             title: true,
+            description: true,
             createdAt: true,
             endsAt: true,
             category: true,
@@ -84,6 +85,7 @@ const getAllDebates = (...args_1) => __awaiter(void 0, [...args_1], void 0, func
         return {
             id: debate.id,
             title: debate.title,
+            description: debate.description,
             authorName: debate.author.name,
             authorEmail: debate.author.email,
             authorImage: debate.author.image,

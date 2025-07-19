@@ -90,6 +90,7 @@ const getAllDebates = async (params: DebateQueryParams = {}) => {
     return {
       id: debate.id,
       title: debate.title,
+      description: debate.description,
       authorName: debate.author.name,
       authorEmail: debate.author.email,
       authorImage: debate.author.image,
