@@ -27,7 +27,7 @@ const createDebate = (payload) => __awaiter(void 0, void 0, void 0, function* ()
     if (!user) {
         throw new ApiError_1.default(http_status_1.default.NOT_FOUND, "User not exists");
     }
-    const endsAt = new Date(Date.now() + payload.duration * 60 * 60 * 1000); // duration in hours
+    const endsAt = new Date(Date.now() + payload.duration * 60 * 60 * 1000);
     const result = yield prisma_1.prisma.debate.create({
         data: {
             title: payload.title,
@@ -47,31 +47,14 @@ const getAllDebates = (...args_1) => __awaiter(void 0, [...args_1], void 0, func
     const baseWhere = searchTerm
         ? {
             OR: [
-                {
-                    title: {
-                        contains: searchTerm,
-                        mode: "insensitive",
-                    },
-                },
-                {
-                    category: {
-                        contains: searchTerm,
-                        mode: "insensitive",
-                    },
-                },
-                {
-                    tags: {
-                        has: searchTerm,
-                    },
-                },
+                { title: { contains: searchTerm, mode: "insensitive" } },
+                { category: { contains: searchTerm, mode: "insensitive" } },
+                { tags: { has: searchTerm } },
             ],
         }
         : {};
-    // Filter for "endingSoon"
     if (sortBy === "endingSoon") {
-        baseWhere.endsAt = {
-            gt: now,
-        };
+        baseWhere.endsAt = { gt: now };
     }
     const debates = yield prisma_1.prisma.debate.findMany({
         where: baseWhere,
@@ -84,35 +67,19 @@ const getAllDebates = (...args_1) => __awaiter(void 0, [...args_1], void 0, func
             duration: true,
             tags: true,
             author: {
-                select: {
-                    name: true,
-                    email: true,
-                    image: true,
-                },
+                select: { name: true, email: true, image: true },
             },
             arguments: {
                 select: {
                     _count: {
-                        select: {
-                            votes: true,
-                        },
+                        select: { votes: true },
                     },
                 },
             },
         },
-        orderBy: sortBy === "mostVoted"
-            ? {
-                createdAt: "desc",
-            }
-            : sortBy === "endingSoon"
-                ? {
-                    endsAt: "asc",
-                }
-                : {
-                    createdAt: "desc",
-                },
+        orderBy: sortBy === "endingSoon" ? { endsAt: "asc" } : { createdAt: "desc" },
     });
-    return debates.map((debate) => {
+    const formattedDebates = debates.map((debate) => {
         const totalVotes = debate.arguments.reduce((sum, arg) => sum + arg._count.votes, 0);
         return {
             id: debate.id,
@@ -127,6 +94,10 @@ const getAllDebates = (...args_1) => __awaiter(void 0, [...args_1], void 0, func
             status: now < debate.endsAt ? "Running" : "Ended",
         };
     });
+    if (sortBy === "mostVoted") {
+        formattedDebates.sort((a, b) => b.voteCount - a.voteCount);
+    }
+    return formattedDebates;
 });
 const joinDebate = (debateId, side, userEmail) => __awaiter(void 0, void 0, void 0, function* () {
     const existing = yield prisma_1.prisma.argument.findFirst({
@@ -313,7 +284,6 @@ const getDebateDetails = (debateId, userEmail) => __awaiter(void 0, void 0, void
     if (isRunning) {
         return Object.assign(Object.assign({}, baseData), { debateStatus: "running", arguments: argumentsWithVotes });
     }
-    // Calculate scoreBoard & winner side if debate is closed
     const winnerSide = yield getWinnerSide(debateId);
     const userMap = new Map();
     for (const arg of debateArguments) {
