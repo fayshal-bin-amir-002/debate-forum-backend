@@ -209,6 +209,10 @@ const editArgument = (payload) => __awaiter(void 0, void 0, void 0, function* ()
     if (userEmail !== argument.userEmail) {
         throw new ApiError_1.default(http_status_1.default.FORBIDDEN, "You are not authorized to edit this argument.");
     }
+    const foundBanned = debate_interface_1.BANNED_WORDS.find((word) => content.toLowerCase().includes(word));
+    if (foundBanned) {
+        throw new ApiError_1.default(http_status_1.default.BAD_REQUEST, `Inappropriate word detected!`);
+    }
     const updatedArgument = yield prisma_1.prisma.argument.update({
         where: {
             id: argument.id,
