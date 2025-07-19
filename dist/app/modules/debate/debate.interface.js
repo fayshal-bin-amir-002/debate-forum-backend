@@ -1,0 +1,32 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.BANNED_WORDS = void 0;
+exports.BANNED_WORDS = [
+    "fuck",
+    "stupid",
+    "idiot",
+    "dumb",
+    "fool",
+    "moron",
+    "loser",
+    "ugly",
+    "shut up",
+    "nonsense",
+    "trash",
+    "garbage",
+    "jerk",
+    "douche",
+    "bastard",
+    "suck",
+    "hate you",
+    "kill yourself",
+    "noob",
+    "dumbass",
+    "retard",
+    "freak",
+    "psycho",
+    "worthless",
+    "annoying",
+    "lame",
+    "crap",
+];

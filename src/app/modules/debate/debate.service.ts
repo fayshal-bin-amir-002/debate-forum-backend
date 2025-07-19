@@ -224,6 +224,7 @@ const editArgument = async (payload: {
   content: string;
 }) => {
   const { userEmail, argumentId, content } = payload;
+
   const argument = await prisma.argument.findFirst({
     where: {
       id: argumentId,
@@ -253,6 +254,14 @@ const editArgument = async (payload: {
       status.FORBIDDEN,
       "You are not authorized to edit this argument."
     );
+  }
+
+  const foundBanned = BANNED_WORDS.find((word) =>
+    content.toLowerCase().includes(word)
+  );
+
+  if (foundBanned) {
+    throw new ApiError(status.BAD_REQUEST, `Inappropriate word detected!`);
   }
 
   const updatedArgument = await prisma.argument.update({

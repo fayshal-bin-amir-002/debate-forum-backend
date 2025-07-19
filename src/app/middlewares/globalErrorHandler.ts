@@ -2,8 +2,6 @@ import { NextFunction, Request, Response } from "express";
 import status from "http-status";
 import config from "../../config";
 import { TErrorSources } from "../interfaces/error";
-import { ZodError } from "zod";
-import handleZodError from "../errors/handleZodError";
 import { Prisma } from "@prisma/client";
 
 export const globalErrorHandler = (
@@ -21,16 +19,8 @@ export const globalErrorHandler = (
     },
   ];
 
-  // Zod validation error
-  if (err instanceof ZodError) {
-    const simplifiedError = handleZodError(err);
-    statusCode = simplifiedError.statusCode;
-    message = simplifiedError.message;
-    errorSources = simplifiedError.errorSources;
-  }
-
   // Prisma validation error
-  else if (err instanceof Prisma.PrismaClientValidationError) {
+  if (err instanceof Prisma.PrismaClientValidationError) {
     statusCode = status.BAD_REQUEST;
     message = "Prisma validation error. Check your input.";
     const cleanedMessage = err.message.split("\n").slice(-1)[0].trim();
