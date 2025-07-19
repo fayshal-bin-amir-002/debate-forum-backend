@@ -20,7 +20,7 @@ const createDebate = async (payload: any) => {
     throw new ApiError(status.NOT_FOUND, "User not exists");
   }
 
-  const endsAt = new Date(Date.now() + payload.duration * 60 * 60 * 1000); // duration in hours
+  const endsAt = new Date(Date.now() + payload.duration * 60 * 60 * 1000);
 
   const result = await prisma.debate.create({
     data: {
@@ -44,32 +44,15 @@ const getAllDebates = async (params: DebateQueryParams = {}) => {
   const baseWhere: any = searchTerm
     ? {
         OR: [
-          {
-            title: {
-              contains: searchTerm,
-              mode: "insensitive",
-            },
-          },
-          {
-            category: {
-              contains: searchTerm,
-              mode: "insensitive",
-            },
-          },
-          {
-            tags: {
-              has: searchTerm,
-            },
-          },
+          { title: { contains: searchTerm, mode: "insensitive" } },
+          { category: { contains: searchTerm, mode: "insensitive" } },
+          { tags: { has: searchTerm } },
         ],
       }
     : {};
 
-  // Filter for "endingSoon"
   if (sortBy === "endingSoon") {
-    baseWhere.endsAt = {
-      gt: now,
-    };
+    baseWhere.endsAt = { gt: now };
   }
 
   const debates = await prisma.debate.findMany({
@@ -83,37 +66,21 @@ const getAllDebates = async (params: DebateQueryParams = {}) => {
       duration: true,
       tags: true,
       author: {
-        select: {
-          name: true,
-          email: true,
-          image: true,
-        },
+        select: { name: true, email: true, image: true },
       },
       arguments: {
         select: {
           _count: {
-            select: {
-              votes: true,
-            },
+            select: { votes: true },
           },
         },
       },
     },
     orderBy:
-      sortBy === "mostVoted"
-        ? {
-            createdAt: "desc",
-          }
-        : sortBy === "endingSoon"
-        ? {
-            endsAt: "asc",
-          }
-        : {
-            createdAt: "desc",
-          },
+      sortBy === "endingSoon" ? { endsAt: "asc" } : { createdAt: "desc" },
   });
 
-  return debates.map((debate) => {
+  const formattedDebates = debates.map((debate) => {
     const totalVotes = debate.arguments.reduce(
       (sum, arg) => sum + arg._count.votes,
       0
@@ -132,6 +99,12 @@ const getAllDebates = async (params: DebateQueryParams = {}) => {
       status: now < debate.endsAt ? "Running" : "Ended",
     };
   });
+
+  if (sortBy === "mostVoted") {
+    formattedDebates.sort((a, b) => b.voteCount - a.voteCount);
+  }
+
+  return formattedDebates;
 };
 
 const joinDebate = async (
@@ -389,7 +362,6 @@ const getDebateDetails = async (debateId: string, userEmail?: string) => {
     };
   }
 
-  // Calculate scoreBoard & winner side if debate is closed
   const winnerSide = await getWinnerSide(debateId);
 
   const userMap = new Map<
@@ -430,7 +402,7 @@ const getDebateDetails = async (debateId: string, userEmail?: string) => {
     debateStatus: "closed",
     winnerSide,
     scoreBoard,
-    arguments: argumentsWithVotes, // Optional: keep this if needed even after closing
+    arguments: argumentsWithVotes,
   };
 };
 
